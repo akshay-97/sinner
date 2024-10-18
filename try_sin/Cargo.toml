@@ -1,0 +1,9 @@
+[package]
+name = "try_sin"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sin = {path = "../sin"}
+tratis = {path  = "../traits"}
+
