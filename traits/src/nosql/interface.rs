@@ -1,0 +1,29 @@
+
+use crate::data_types::types::{FromCqlData, ToCqlData};
+use crate::query::query::Query;
+
+pub trait NoSql : FromCqlData + ToCqlData {
+    // fn partition_key() -> [&'static str,usize];
+    // fn clustering_key() ->[&'static str, usize];
+    fn table_name() -> &'static str;
+    fn keyspace() -> &'static str;
+}
+
+pub trait StorageInterface{
+    fn execute<T: NoSql>(&self, query: Query<T>) -> QueryResult;
+
+}
+
+pub type QueryResult = Result<Qres, CqlError>;
+
+pub enum Qres{
+    Success(Vec<u8>),
+    NoRes(),
+    SuccessCount(usize),
+}
+
+pub enum CqlError{
+    E01,
+    E02,
+    E03
+}

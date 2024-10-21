@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 sin = {path = "../sin"}
-tratis = {path  = "../traits"}
+traits = {path  = "../traits"}
 
