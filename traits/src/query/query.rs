@@ -1,51 +1,86 @@
 use crate::data_types::types::{CqlMap, Consistency};
-use crate::nosql::interface::NoSql;
+use crate::nosql::interface::{NoSql, CqlStore};
 use std::marker::PhantomData;
 
-pub struct Query<T : NoSql>{
-    consistency : Option<Consistency>,
-    op : Op,
-    _entity: PhantomData<T>
+// pub struct Query<T : NoSql>{
+//     consistency : Option<Consistency>,
+//     op : Op,
+//     _entity: PhantomData<T>
+// }
+
+trait QueryResultType{
+    type Output;
 }
 
-impl <T : NoSql> Query<T>{
-    pub fn create_find_query(query_clause : CqlMap, c : Option<Consistency>) -> Self{
-        Self{
-            consistency : c,
-            op : Op::Find(FindBody::new(query_clause)),
-            _entity : PhantomData,
-        }
+pub enum QueryError{
+    E01,
+    E02,
+    E03
+}
+
+trait QueryInterface<S: CqlStore> : QueryResultType{
+    fn execute(self, store : &S) -> Result<Self::Output, QueryError>;
+    fn into_output(query_output : S::Output) -> Option<Self::Output>;
+    //fn into_iter_output(query_output : S::Output) -> Option<IntoIterator
+    fn to_statement(self) -> String;
+}
+
+struct FindOne<T: NoSql>{
+    wh_clause: CqlMap,
+    _model : PhantomData<T>
+}
+
+impl <T: NoSql> QueryResultType for FindOne<T>{
+    type Output = Option<T>;
+}
+
+impl <T:NoSql> QueryInterface<crate::nosql::interface::AstraClient> for FindOne<T>{
+    fn execute(self, store : &crate::nosql::interface::AstraClient) -> Result<Self::Output, QueryError> {
+        
+    }
+
+    fn to_statement(self) -> String{
+
+    }
+
+    fn into_output(query_output : <crate::nosql::interface::AstraClient as CqlStore>::Output) -> Option<Self::Output> {
+        
     }
 }
 
-pub enum Op {
-    Insert(InsertBody),
-    Update(UpdateBody),
-    Delete(DeleteBody),
-    Find(FindBody),
+struct FindAll<T: NoSql>{
+    wh_clause: CqlMap,
+    _model : PhantomData<T>
 }
 
-pub struct InsertBody{
-    data : CqlMap
+impl <T: NoSql> QueryResultType for FindAll<T>{
+    type Output = Vec<T>;
 }
 
-pub struct UpdateBody{
-    where_clause : CqlMap,
-    set_clause: CqlMap,
+struct Update<T: NoSql>{
+    wh_clause : CqlMap,
+    set_clause : CqlMap,
+    _model : PhantomData<T>
 }
 
-pub struct DeleteBody{
-    where_clause: CqlMap
+impl <T:NoSql> QueryResultType for Update<T>{
+    type Output = usize;
 }
 
-pub struct FindBody {
-    where_clause : CqlMap,
+struct Create<T: NoSql>{
+    model : T
 }
 
-impl FindBody{
-    pub fn new(where_clause : CqlMap) -> Self{
-        Self{
-            where_clause
-        }
-    }
+impl <T:NoSql> QueryResultType for Create<T>{
+    type Output = bool;
+}
+
+struct Delete<T: NoSql>{
+    wh_clause : CqlMap,
+    _model: PhantomData<T>
+}
+
+
+impl <T:NoSql> QueryResultType for Delete<T>{
+    type Output = bool;
 }

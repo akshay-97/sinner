@@ -16,6 +16,10 @@ pub trait ToCqlData{
     fn to_cql(self) -> CqlType;
 }
 
+pub trait ToCqlRow{
+    fn to_row(self) -> CqlMap;
+}
+
 impl ToCqlData for String{
     fn to_cql(self) -> CqlType {
         CqlType::Str(self.clone())
@@ -35,7 +39,7 @@ impl ToCqlData for f64{
 }
 
 
-pub trait FromCqlData :Sized{
+pub trait FromCqlData :Sized {
     type Error;
     fn from_cql(result: &CqlType) -> Result<Self , Self::Error>;
 }
