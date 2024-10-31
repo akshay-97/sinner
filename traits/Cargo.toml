@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-trait = {version = "*"}
 sin = {path = "../sin"}
+stargate-grpc = {version = "*"}
