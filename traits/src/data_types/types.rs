@@ -130,7 +130,7 @@ impl FromCqlData for Uuid{
 }
 
 //
-use crate::{nosql::interface::CqlStore, query::query::QueryInterface};
+use crate::nosql::interface::CqlStore;
 use stargate_grpc::{proto::{value::Inner, ColumnSpec}, query::QueryBuilder, Query, ResultSet, Row, Value};
 
 pub trait IntoValue{
@@ -150,13 +150,13 @@ where
 pub struct AstraResult(Vec<ColumnSpec>, Vec<Row>);
 
 pub struct AstrStatement{
-    query_str : &'static str,
+    query_str : String,
     binds : Vec<(String, Box<dyn IntoValue + Send>)>,
     keyspace : &'static str,
 }
 
 impl AstrStatement{
-    pub fn new(query_str : &'static str
+    pub fn new(query_str : String
         , binds: Vec<(String, Box<dyn IntoValue + Send>)>
         , keyspace : &'static str) -> Self
     {
@@ -191,7 +191,7 @@ impl CqlStore for stargate_grpc::StargateClient{
     fn into_query(statement : Self::Statement) -> Self::Query{
         let mut query = Query::builder()
             .keyspace(statement.keyspace)
-            .query(statement.query_str);
+            .query(statement.query_str.as_str());
         
         let mut enumer = statement.binds
             .into_iter();
@@ -260,6 +260,7 @@ impl ToCqlData for Value{
     }
 }
 
+//TODO : implement for all types
 impl Into<Value> for CqlType{
     fn into(self) -> Value {
         match self {
