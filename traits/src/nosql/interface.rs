@@ -1,8 +1,6 @@
 
-use crate::{
-    query::query::QueryInterface,
-    data_types::types::{FromCqlData, ToCqlData, ToCqlRow}
-};
+use crate::
+    data_types::types::{FromCqlData, ToCqlData,};
 
 pub trait NoSql : FromCqlData + ToCqlData {
     // fn partition_key() -> [&'static str,usize];
@@ -30,16 +28,4 @@ pub trait CqlStore{
 // struct PreparedStatement<'a>{
 //     statement : &'static str,
 //     binds : Binds<'a>,
-// }
-
-// struct Binds<'a>{
-//     binds : &'
-// }
-
-// pub struct ResultSet;
-
-// impl ToCqlRow for ResultSet{
-//     fn to_row(self) -> crate::data_types::types::CqlMap {
-//         todo!()
-//     }
 // }
