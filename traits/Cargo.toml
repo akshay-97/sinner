@@ -7,3 +7,4 @@ edition = "2021"
 async-trait = {version = "*"}
 sin = {path = "../sin"}
 stargate-grpc = {version = "*"}
+tonic = {version = "*"}

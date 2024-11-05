@@ -114,7 +114,7 @@ impl FromCqlData for Status{
         Err(())
     }
 }
-pub struct Uuid(i64);
+pub struct Uuid(pub i64);
 
 impl ToCqlData for Uuid{
     fn to_cql(self) -> CqlType {
@@ -147,8 +147,12 @@ where
 }
 
 
-pub struct AstraResult(Vec<ColumnSpec>, Vec<Row>);
+//pub struct AstraResult(Vec<ColumnSpec>, Vec<Row>);
 
+pub enum AstraResult{
+    Return(Vec<ColumnSpec>, Vec<Row>),
+    Ack,
+}
 pub struct AstrStatement{
     query_str : String,
     binds : Vec<(String, Box<dyn IntoValue + Send>)>,
@@ -171,7 +175,7 @@ impl AstrStatement{
 
 #[async_trait::async_trait]
 impl CqlStore for stargate_grpc::StargateClient{
-    type Output = AstraResult;
+    type Output = tonic::Response<stargate_grpc::proto::Response>;
     type Statement = AstrStatement;
     type StoreError = ();
     type Query = QueryBuilder;
@@ -181,11 +185,11 @@ impl CqlStore for stargate_grpc::StargateClient{
         self.execute_query(query)
             .await
             .map_err(|_| ())
-            .and_then(|r| {
-                let result_set: ResultSet = r.try_into().map_err(|_| ())?;
-                Ok(AstraResult(result_set.columns, result_set.rows))
-            })
-            .map_err(|_e| ())
+            // .and_then(|r| {
+            //     let result_set: ResultSet = r.try_into().map_err(|_| ())?;
+            //     Ok(AstraResult(result_set.columns, result_set.rows))
+            // })
+            // .map_err(|_e| ())
     }
 
     fn into_query(statement : Self::Statement) -> Self::Query{
@@ -202,19 +206,19 @@ impl CqlStore for stargate_grpc::StargateClient{
     }
 }
 
-struct AstraResultIter{
+enum AstraResultIter{
     //curr: Option<CqlMap>,
-    from : Vec<Row>,
-    col_spec : Vec<ColumnSpec>, 
+    Rows(Vec<Row>,Vec<ColumnSpec>),
+    Empty, 
 }
 
 impl AstraResultIter{
-    fn new(astra_result : AstraResult) -> Self{
-        Self{
-           // curr : None,
-            from : astra_result.1,
-            col_spec: astra_result.0,
-        }
+    fn new(column : Vec<ColumnSpec>, rows : Vec<Row>) -> Self{
+        Self::Rows(rows, column)
+    }
+
+    fn empty() -> Self{
+        Self::Empty
     }
 }
 
@@ -222,24 +226,40 @@ impl Iterator for AstraResultIter{
     type Item = CqlMap;
 
     fn next(&mut self) -> Option<Self::Item>{
-        let curr_row = self.from.pop()?;
-        let zipped = self.col_spec.clone()
-            .into_iter()
-            .zip(curr_row.values);
+        match self{
+            Self::Rows(from , col_spec) => {
+                let curr_row = from.pop()?;
+                let zipped = col_spec.clone()
+                    .into_iter()
+                    .zip(curr_row.values);
 
-        let mut map : CqlMap = HashMap::with_capacity(zipped.len());
-        for (col, value) in zipped{
-            map.insert(col.name.clone(), value.to_cql());
+                let mut map : CqlMap = HashMap::with_capacity(zipped.len());
+                for (col, value) in zipped{
+                    map.insert(col.name.clone(), value.to_cql());
+                }
+                Some(map)
+            },
+            Self::Empty => None
         }
-            Some(map)
     }
+        
 }
-impl ToCqlRow for AstraResult{
-    
+
+impl ToCqlRow for ResultSet{
     fn to_row_iter(self) -> impl Iterator<Item = CqlMap> {
-        AstraResultIter::new(self)
+        AstraResultIter::new(self.columns, self.rows)       
     }
 }
+
+// impl ToCqlRow for AstraResult{
+    
+//     fn to_row_iter(self) -> impl Iterator<Item = CqlMap> {
+//         match self{
+//             AstraResult::Return(column, rows) => AstraResultIter::new(column, rows),
+//             AstraResult::Ack => AstraResultIter::empty(),
+//         }
+//     }
+// }
 
 impl ToCqlData for Value{
     fn to_cql(self) -> CqlType {

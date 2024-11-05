@@ -16,7 +16,7 @@ pub trait NoSql : FromCqlData + ToCqlData {
 
 #[async_trait::async_trait]
 pub trait CqlStore{
-    type Output: ToCqlRow;
+    type Output;
     type Statement;
     type StoreError;
     type Query;

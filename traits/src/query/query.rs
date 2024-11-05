@@ -26,6 +26,16 @@ pub struct FindOne<T: NoSql>{
     _model : PhantomData<T>
 }
 
+impl <T: NoSql> FindOne<T>{
+    pub fn create_query(binds : CqlMap, query : String) -> Self{
+        Self{
+            binds,
+            query,
+            _model : PhantomData
+        }
+    }
+}
+
 impl <T: NoSql> QueryResultType for FindOne<T>{
     type Output = T;
 }
@@ -45,6 +55,9 @@ impl <T: NoSql + Send> QueryInterface<stargate_grpc::StargateClient> for FindOne
 
     fn into_output(query_output : <stargate_grpc::StargateClient as CqlStore>::Output) -> Option<Self::Output> {
         query_output
+            .try_into()
+            .map(|r : stargate_grpc::ResultSet| r)
+            .ok()?
             .to_row_iter()
             .into_iter()
             .next()
@@ -96,12 +109,52 @@ impl <T:NoSql> QueryResultType for Update<T>{
     type Output = usize;
 }
 
-struct Create<T: NoSql>{
+pub struct Create<T: NoSql>{
     model : T
+}
+
+impl <T: NoSql> Create<T>{
+    pub fn create_query(model : T) -> Self{
+        Self{
+            model
+        }
+    }
 }
 
 impl <T:NoSql> QueryResultType for Create<T>{
     type Output = bool;
+}
+
+#[async_trait::async_trait]
+impl <T: NoSql + Send> QueryInterface<stargate_grpc::StargateClient> for Create<T> {
+    async fn execute(self, store : &mut stargate_grpc::StargateClient) -> Result<Self::Output, QueryError> {
+        let statement = self.into_statement();
+        let result = store.execute(statement)
+            .await
+            .map_err(|_e| QueryError::E01)?; //TODO: add error context here
+        
+        Self::into_output(result)
+            .ok_or(QueryError::E02) // TODO: add error context here
+
+    }
+
+    fn into_output(_query_output : <stargate_grpc::StargateClient as CqlStore>::Output) -> Option<Self::Output> {
+          Some(true) // TODO: verify result  
+    }
+
+    fn into_statement(self) -> <stargate_grpc::StargateClient as CqlStore>::Statement{
+        if let CqlType::Row(bind_map) = T::to_cql(self.model){
+            let mut res_binds: Vec<(String, Box<dyn IntoValue + Send + 'static>)> = Vec::with_capacity(bind_map.len());
+            let _ = bind_map
+                .into_iter()
+                .map(|(key, val)| res_binds.push((key, Box::new(val))));
+            AstrStatement::new(T::insert_statement().to_string(), res_binds ,T::keyspace())
+        }else{
+            panic!("fix me")
+        }
+         // TODO generate query string in query object
+    }
+
 }
 
 struct Delete<T: NoSql>{
