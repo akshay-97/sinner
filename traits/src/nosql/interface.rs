@@ -22,10 +22,3 @@ pub trait CqlStore{
     async fn execute(&mut self, statement: Self::Statement) -> Result<Self::Output, Self::StoreError>;
     fn into_query(statement: Self::Statement) -> Self::Query;
 }
-
-// trait FromCqlRow : Sized {}
-
-// struct PreparedStatement<'a>{
-//     statement : &'static str,
-//     binds : Binds<'a>,
-// }

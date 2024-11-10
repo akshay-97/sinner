@@ -12,15 +12,18 @@ pub enum CqlType{
 }
 
 pub type CqlMap  = HashMap<String, CqlType>;
+pub type CqlMapWithQuery = (QueryString, HashMap<String, CqlType>);
+type QueryString = String;
 
 pub trait ToCqlData{
     fn to_cql(self) -> CqlType;
 }
 
 pub trait ToCqlRow{
+    type Output;
    // fn to_row(self) -> CqlMap;
     //fn to_row_iter<T, S : Iterator<Item = T>>(self: dyn IntoIterator<Item = T, IntoIter = S>) -> impl IntoIterator;
-    fn to_row_iter(self) -> impl Iterator<Item = CqlMap>;
+    fn to_row_iter(self) -> impl Iterator<Item = Self::Output>;
 }   
 
 impl ToCqlData for String{
@@ -105,11 +108,11 @@ impl FromCqlData for Status{
     type Error = ();
     fn from_cql(result: &CqlType) -> Result<Self , Self::Error> {
         if let CqlType::Str(s) = result{
-            return (match s.as_str(){
+            return match s.as_str(){
                 "Ok" => Ok(Self::Ok),
                 "NotOk" => Ok(Self::NotOk),
                 _ => Err(())
-            })
+            }
         }
         Err(())
     }
@@ -185,11 +188,6 @@ impl CqlStore for stargate_grpc::StargateClient{
         self.execute_query(query)
             .await
             .map_err(|_| ())
-            // .and_then(|r| {
-            //     let result_set: ResultSet = r.try_into().map_err(|_| ())?;
-            //     Ok(AstraResult(result_set.columns, result_set.rows))
-            // })
-            // .map_err(|_e| ())
     }
 
     fn into_query(statement : Self::Statement) -> Self::Query{
@@ -246,6 +244,7 @@ impl Iterator for AstraResultIter{
 }
 
 impl ToCqlRow for ResultSet{
+    type Output = CqlMap;
     fn to_row_iter(self) -> impl Iterator<Item = CqlMap> {
         AstraResultIter::new(self.columns, self.rows)       
     }

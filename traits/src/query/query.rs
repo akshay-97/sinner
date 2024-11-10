@@ -76,9 +76,20 @@ impl <T: NoSql + Send> QueryInterface<stargate_grpc::StargateClient> for FindOne
 
 }
 
-struct FindAll<T: NoSql>{
-    wh_clause: CqlMap,
+pub struct FindAll<T: NoSql>{
+    binds: CqlMap,
+    query : String,
     _model : PhantomData<T>
+}
+
+impl <T : NoSql> FindAll<T>{
+    pub fn create_query(binds : CqlMap, query : String) -> Self{
+        Self {
+            binds : binds,
+            query : query,
+            _model : PhantomData
+        }
+    }
 }
 
 impl <T : NoSql> FindOne<T>{
@@ -86,7 +97,7 @@ impl <T : NoSql> FindOne<T>{
         T::keyspace()
     }
 
-    pub fn create(binds : CqlMap, query : String) -> Self{
+    fn create(binds : CqlMap, query : String) -> Self{
         Self {
             binds : binds,
             query : query,
@@ -99,12 +110,18 @@ impl <T: NoSql> QueryResultType for FindAll<T>{
     type Output = Vec<T>;
 }
 
-struct Update<T: NoSql>{
-    wh_clause : CqlMap,
-    set_clause : CqlMap,
+pub struct Update<T: NoSql>{
+    where_binds : CqlMap,
+    set_binds : CqlMap,
+    query: String,
     _model : PhantomData<T>
 }
 
+impl <T: NoSql> Update<T>{
+    pub fn create_query(where_binds : CqlMap, set_binds : CqlMap, query : String) -> Self{
+        Self { where_binds, set_binds, query, _model: PhantomData}
+    }
+}
 impl <T:NoSql> QueryResultType for Update<T>{
     type Output = usize;
 }
