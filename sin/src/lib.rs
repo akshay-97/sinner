@@ -1,3 +1,4 @@
+use proc_macro::Ident;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
@@ -9,6 +10,86 @@ use syn::Result;
 use quote::ToTokens;
 use syn::parse::ParseStream;
 use proc_macro2::Span;
+
+#[derive(Debug)]
+struct DbFields{
+    fields : Vec<Rc<NoSqlField>>,
+    partition_keys : Vec<FieldRef>,
+    clustering_keys: Option<Vec<FieldRef>>
+}
+#[derive(Debug)]
+struct NoSqlField{ // TODO : make this string wrapped in quotes when creating a query
+    ident: syn::Ident,
+    ty : syn::Type,
+    //span : proc_macro2::Span,
+}
+
+#[derive(Debug)]
+struct FieldRef{
+    name : String,
+    index : Option<Rc<NoSqlField>>,
+}
+
+impl From<String> for FieldRef{
+    fn from(value: String) -> Self {
+        Self { name: value, index: None }
+    }
+}
+
+
+use std::rc::Rc;
+
+fn get_field_with_types<'a>(data: &'a Data, mut partition_keys : Vec<FieldRef>, mut clustering_keys : Option<Vec<FieldRef>>) -> Option<DbFields>{
+    match *data{
+        Data::Struct(ref data) => {
+            if let Fields::Named(ref fields) = data.fields{
+                let mut db_fields = Vec::with_capacity(fields.named.len());
+                let _ : Vec<()>= fields
+                    .named
+                    .iter()
+                    .map(|f|{
+                        f.ident.as_ref().map(
+                            |ident| {
+                                let entry = Rc::new(NoSqlField {ident : ident.clone(), ty: f.ty.clone()});
+                                db_fields.push(entry.clone());
+
+                                let index = db_fields.len() - 1;
+
+                                partition_keys
+                                    .iter_mut()
+                                    .find(|item|
+                                        db_fields[index].ident == item.name)
+                                    .map(|found|{
+                                        found.index = Some(entry.clone())
+                                    });
+                                
+                                clustering_keys.as_deref_mut()
+                                    .map(|cluster_keys|{
+                                        cluster_keys
+                                            .iter_mut()
+                                            .find(|item| db_fields[index].ident == item.name)
+                                            .map(|found|{
+                                                found.index = Some(entry.clone())
+                                            })
+                                    });
+                                
+                                    
+                            }
+                        );
+                    }
+                    ).collect();
+                return Some(DbFields{
+                    fields : db_fields,
+                    partition_keys,
+                    clustering_keys,
+
+                })
+            }
+            None
+        },
+        _ => None
+    }
+}
 
 #[proc_macro_derive(ToCqlData)]
 pub fn derive_to_cql(input : proc_macro::TokenStream) -> proc_macro::TokenStream{
@@ -206,10 +287,10 @@ fn gen_trait_bounds(mut generics: Generics) -> Generics {
     generics
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct Args{
-    _primary_key : Option<Vec<String>>,
-    _clustering_keys: Option<Vec<String>>,
+    _primary_key : Option<Vec<FieldRef>>,
+    _clustering_keys: Option<Vec<FieldRef>>,
     table_name: Option<String>,
     keyspace : Option<String>,
 }
@@ -266,23 +347,23 @@ impl Parse for Args{
                     table_name = Some(value.to_token_stream().to_string());
                 },
                 "partition_key" =>{
-                    let value : Vec<String> =
+                    let value : Vec<FieldRef> =
                         input
                             .parse::<syn::ExprArray>()?
                             .elems
                             .into_iter()
-                            .map(|e| e.to_token_stream().to_string())
+                            .map(|e| e.to_token_stream().to_string().into())
                             .collect();
                     
                     _primary_key = Some(value);
                 },
                 "clustering_key" =>{
-                    let value : Vec<String> =
+                    let value : Vec<FieldRef> =
                         input
                             .parse::<syn::ExprArray>()?
                             .elems
                             .into_iter()
-                            .map(|e| e.to_token_stream().to_string())
+                            .map(|e| e.to_token_stream().to_string().into())
                             .collect();
                     
                     _clustering_keys = Some(value);
@@ -322,7 +403,7 @@ pub fn nosql(attrs: proc_macro::TokenStream, minput : proc_macro::TokenStream) -
         #[derive(sin::ToCqlData, sin::FromCqlData)]
     };
 
-    let res = quote!{
+    let nosql = quote!{
         impl NoSql for #name {
             fn table_name() -> &'static str{
                 #table
@@ -335,10 +416,152 @@ pub fn nosql(attrs: proc_macro::TokenStream, minput : proc_macro::TokenStream) -
 
     };
 
+    let query_traits = quote!{
+        impl Selectable for #name{}
+        impl Insertable for #name{}
+    };
+
+    let partition_keys = match args._primary_key{
+        Some(k) => k,
+        None => {
+            return
+                proc_macro::TokenStream::from(
+                    syn::Error::new(Span::call_site(),
+                        "primary keys not found")
+                    .to_compile_error()
+                ) 
+        }
+    };
+    let clustering_keys = args._clustering_keys;
+
+    let fields = match get_field_with_types(&input.data, partition_keys, clustering_keys){
+        Some(a) => a,
+        None => {
+            return
+                proc_macro::TokenStream::from(
+                    syn::Error::new(Span::call_site(),
+                        "expected struct with named fields")
+                    .to_compile_error()
+                )
+        }
+    };
+
+
+    let filters = generate_filters(fields);
+    panic!("filters are {:?}", filters);
+
+    // let gen_filters = {
+    //     let filters = generate_filters(fields);
+    //     quote!{
+    //         impl #name{
+    //             #(#filters)*
+    //         }
+    //     }
+    // };   
+    // panic!("what are filters {:?}", gen_filters);
     proc_macro::TokenStream::from(quote! {
         #pre_req
         #input
-        #res
+        #nosql
+        #query_traits
+        
     })
 
+}
+
+struct FilterByBuilder{
+    data_map : Vec<(syn::Ident, syn::Type)>,
+    query_string: String,
+    fn_prefix: String,
+}
+
+
+impl FilterByBuilder{
+    //TODO: add approx for string size as well
+    fn new(field_size: usize) -> Self{
+        Self{
+            data_map : Vec::with_capacity(field_size),
+            query_string : String::new(),
+            fn_prefix : String::from("filter_by"),
+        }
+    }
+
+    fn add(&mut self, name: &String, ident : &syn::Ident, ty : &syn::Type){
+        if self.query_string.len() ==0{
+            self.query_string.extend([name.as_str(), " = ?"]);
+        }
+        else{
+            self.query_string.extend([" AND ", name.as_str(), " = ?"]);
+        }
+        self.query_string.extend(["_", name.as_str()]);
+
+        self.data_map.push((ident.clone(), ty.clone()));
+    }
+
+}
+
+impl ToTokens for FilterByBuilder{
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let fn_sig =
+          self
+            .data_map
+            .iter()
+            .map(|(ident, ty)|{
+                quote! {
+                    #ident : #ty
+                }
+        });
+
+        let fn_body =
+            self
+              .data_map
+              .iter()
+              .map(|(ident, _)|{
+                quote! {
+                    (stringify!(#ident).to_string(), #ident.to_cql())
+                }
+            });
+    
+        let query_string = self.query_string.as_str();
+        let res = quote! {
+            fn #self.fn_prefix (#(#fn_sig),*) -> FilterBy<Self>{
+                let filter = HashMap::from(
+                    [#(#fn_body),*]
+                )
+                FilterBy::<Self>::new(filter, #query_string)
+            }
+        };
+        tokens.extend(res);
+    }
+}
+
+
+fn len_option<T>(v : &Option<Vec<T>>) -> usize{
+    match v{
+        None => 0,
+        Some(ve) => ve.len(),
+    }
+}
+
+fn generate_filters(db_fields : DbFields) -> Vec<TokenStream>{
+    let field_size = db_fields.partition_keys.len() + len_option(&db_fields.clustering_keys);
+    let fns = len_option(&db_fields.clustering_keys) +1;
+
+    let mut filter_builder  = FilterByBuilder::new(field_size);
+    let mut res = Vec::with_capacity(fns);
+
+    for i in db_fields.partition_keys.iter(){
+        filter_builder.add(&i.name, &i.index.as_deref().unwrap().ident, &i.index.as_deref().unwrap().ty);
+    }
+
+    res.push(filter_builder.to_token_stream());
+
+    if let Some(cluster_keys) = db_fields.clustering_keys{
+        for i in cluster_keys.iter(){
+            filter_builder.add(&i.name, &i.index.as_deref().unwrap().ident, &i.index.as_deref().unwrap().ty);
+            res.push(filter_builder.to_token_stream());
+        }
+    }
+
+    res
 }
