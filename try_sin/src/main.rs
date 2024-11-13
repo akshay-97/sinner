@@ -16,14 +16,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let create_query = payment.create().build();
     let find_query =
         Payment::select()
-            .filter_by(Payment::filter_by_partition_key(Uuid(1i64)))
+            .filter_by(Payment::filter_by_id(1i64))
             .build();
 
     let update_payment = UpdatePayment{status : "asdasd".to_string()};
     let update_query =
         update_payment
             .update()
-            .filter_by(Payment::filter_by_partition_key(Uuid(1i64)))
+            .filter_by(Payment::filter_by_id(1i64))
             .build();
     let res_1 = create_query.execute(&mut client).await;
     let res_2 = find_query.execute(&mut client).await;
@@ -82,25 +82,7 @@ impl ToCqlRow for UpdatePayment{
         std::iter::once((set_clause_q.to_string(), set_clause))
     }
 }
-impl Payment{
-    pub fn filter_by_partition_key(id : Uuid) -> FilterBy<Self>{
-        let filter = HashMap::from([("id".to_string(), id.to_cql())]);
-        FilterBy::<Self>::new(filter, "id = ?")
-    }
 
-    pub fn filter_by_partition_and_status(id : Uuid, status: Status) -> FilterBy<Self>{
-        let filter   = HashMap::from(
-            [
-                ("id".to_string(), id.to_cql()),
-                ("status".to_string(), status.to_cql())
-            ]
-        );
-        FilterBy::<Self>::new(filter, "id = ? AND status = ?")
-    }
-}
-
-impl Selectable for Payment{}
-impl Insertable for Payment{}
 struct FilterBy<T>{
     filter : CqlMap, // TODO: should be impl IntoExpression
     query_string : &'static str,

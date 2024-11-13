@@ -6,10 +6,10 @@ use syn::{
     parse_macro_input, parse_quote, Data, DeriveInput, Fields, FieldsNamed, GenericParam, Generics
 };
 
+use proc_macro2::Span;
 use syn::Result;
 use quote::ToTokens;
 use syn::parse::ParseStream;
-use proc_macro2::Span;
 
 #[derive(Debug)]
 struct DbFields{
@@ -448,23 +448,22 @@ pub fn nosql(attrs: proc_macro::TokenStream, minput : proc_macro::TokenStream) -
 
 
     let filters = generate_filters(fields);
-    panic!("filters are {:?}", filters);
+    //panic!("filters are {:?}", filters);
 
-    // let gen_filters = {
-    //     let filters = generate_filters(fields);
-    //     quote!{
-    //         impl #name{
-    //             #(#filters)*
-    //         }
-    //     }
-    // };   
-    // panic!("what are filters {:?}", gen_filters);
+    let gen_filters = {
+        quote!{
+            impl #name{
+               #filters
+            }
+        }
+    };   
+    //panic!("what are filters {:?}", gen_filters.to_string());
     proc_macro::TokenStream::from(quote! {
         #pre_req
         #input
         #nosql
         #query_traits
-        
+        #gen_filters
     })
 
 }
@@ -493,7 +492,7 @@ impl FilterByBuilder{
         else{
             self.query_string.extend([" AND ", name.as_str(), " = ?"]);
         }
-        self.query_string.extend(["_", name.as_str()]);
+        self.fn_prefix.extend(["_", name.as_str()]);
 
         self.data_map.push((ident.clone(), ty.clone()));
     }
@@ -521,13 +520,12 @@ impl ToTokens for FilterByBuilder{
                     (stringify!(#ident).to_string(), #ident.to_cql())
                 }
             });
-    
-        let query_string = self.query_string.as_str();
+        let fn_name = syn::Ident::new(&self.fn_prefix.as_str(), Span::call_site().into());
+        
+        let query_string = syn::Lit::Str(syn::LitStr::new(self.query_string.as_str(), Span::call_site().into()));
         let res = quote! {
-            fn #self.fn_prefix (#(#fn_sig),*) -> FilterBy<Self>{
-                let filter = HashMap::from(
-                    [#(#fn_body),*]
-                )
+            fn #fn_name (#(#fn_sig),*) -> FilterBy<Self>{
+                let filter = HashMap::from([#(#fn_body),*]);
                 FilterBy::<Self>::new(filter, #query_string)
             }
         };
@@ -543,25 +541,26 @@ fn len_option<T>(v : &Option<Vec<T>>) -> usize{
     }
 }
 
-fn generate_filters(db_fields : DbFields) -> Vec<TokenStream>{
+fn generate_filters(db_fields : DbFields) -> TokenStream {
     let field_size = db_fields.partition_keys.len() + len_option(&db_fields.clustering_keys);
     let fns = len_option(&db_fields.clustering_keys) +1;
-
+    let mut token_stream = TokenStream::new();
     let mut filter_builder  = FilterByBuilder::new(field_size);
-    let mut res = Vec::with_capacity(fns);
+    //let mut res = Vec::with_capacity(fns);
 
     for i in db_fields.partition_keys.iter(){
         filter_builder.add(&i.name, &i.index.as_deref().unwrap().ident, &i.index.as_deref().unwrap().ty);
     }
-
-    res.push(filter_builder.to_token_stream());
+    filter_builder.to_tokens(&mut token_stream);
+    //res.push(filter_builder.to_token_stream());
 
     if let Some(cluster_keys) = db_fields.clustering_keys{
         for i in cluster_keys.iter(){
             filter_builder.add(&i.name, &i.index.as_deref().unwrap().ident, &i.index.as_deref().unwrap().ty);
-            res.push(filter_builder.to_token_stream());
+            filter_builder.to_tokens(&mut token_stream);
+            //res.push(filter_builder.to_token_stream());
         }
     }
 
-    res
+    token_stream
 }
