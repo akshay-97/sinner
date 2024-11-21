@@ -1,9 +1,5 @@
 use crate::{consts, migrations::Conn};
-use scylla::statement::{
-    batch::{Batch, BatchStatement, BatchType},
-    query::Query,
-};
-
+use colored::Colorize;
 use std::path::PathBuf;
 
 pub(crate) struct MigrationsToRun {
@@ -27,18 +23,22 @@ impl MigrationsToRun {
         for mut dir in self.dirs {
             dir.push(consts::UP_CQL);
 
-            let stmts = std::fs::read_to_string(dir)?
-                .split(';')
+            let stmts = std::fs::read_to_string(&dir)?
+                .split_inclusive(";\r\n")
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>();
 
-            let query = stmts
-                .into_iter()
-                .map(|s| BatchStatement::Query(Query::new(s)))
-                .collect::<Vec<BatchStatement>>();
+            let announce = format!("Running migrations for {}", dir.to_string_lossy()).green();
+            println!("{}", announce);
 
-            let batch = Batch::new_with_statements(BatchType::Logged, query);
-            conn.batch(&batch, ((),)).await.map_err(|err| {
+            Self::inner_run(&conn, stmts).await?;
+        }
+        Ok(())
+    }
+
+    async fn inner_run(conn: &Conn, stmts: Vec<String>) -> std::io::Result<()> {
+        for stmt in stmts {
+            conn.query_unpaged(stmt, &[]).await.map_err(|err| {
                 dbg!(err);
                 std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "Connection Refused")
             })?;

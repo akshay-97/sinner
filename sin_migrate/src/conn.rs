@@ -1,7 +1,7 @@
-use scylla::{CachingSession, SessionBuilder};
+use scylla::{Session, SessionBuilder};
 
 pub(crate) struct Conn {
-    conn: CachingSession,
+    conn: Session,
 }
 
 impl Conn {
@@ -20,16 +20,13 @@ impl Conn {
         }
 
         Self {
-            conn: CachingSession::from(
-                session.build().await.expect("Unable to reach the database"),
-                16,
-            ),
+            conn: session.build().await.expect("Unable to reach the database"),
         }
     }
 }
 
 impl std::ops::Deref for Conn {
-    type Target = CachingSession;
+    type Target = Session;
 
     fn deref(&self) -> &Self::Target {
         &self.conn
