@@ -8,3 +8,5 @@ async-trait = {version = "*"}
 sin = {path = "../sin"}
 stargate-grpc = {version = "*"}
 tonic = {version = "*"}
+#scylla = {version =  "0.15.0"}
+scylla = {git = "https://github.com/akshay-97/scylla-rust-driver", rev = "d044438d5ccc6dece66d04f22b97c1c6ea615c3e"}
