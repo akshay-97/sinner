@@ -403,18 +403,7 @@ pub fn nosql(attrs: proc_macro::TokenStream, minput : proc_macro::TokenStream) -
         #[derive(sin::ToCqlData, sin::FromCqlData)]
     };
 
-    let nosql = quote!{
-        impl NoSql for #name {
-            fn table_name() -> &'static str{
-                #table
-            }
-
-            fn keyspace() -> &'static str{
-                #keyspace
-            }
-        }
-
-    };
+    
 
     let query_traits = quote!{
         impl Selectable for #name{}
@@ -446,9 +435,26 @@ pub fn nosql(attrs: proc_macro::TokenStream, minput : proc_macro::TokenStream) -
         }
     };
 
+    let insert_statement = generate_insert(&table, &keyspace,fields.fields);
 
-    let filters = generate_filters(fields);
-    //panic!("filters are {:?}", filters);
+    let nosql = quote!{
+        impl NoSql for #name {
+            fn table_name() -> &'static str{
+                #table
+            }
+
+            fn keyspace() -> &'static str{
+                #keyspace
+            }
+
+            fn insert_statement() -> &'static str{
+                #insert_statement
+            }
+        }
+
+    };
+
+    let filters = generate_filters(fields.partition_keys, fields.clustering_keys);
 
     let gen_filters = {
         quote!{
@@ -457,7 +463,7 @@ pub fn nosql(attrs: proc_macro::TokenStream, minput : proc_macro::TokenStream) -
             }
         }
     };   
-    //panic!("what are filters {:?}", gen_filters.to_string());
+
     proc_macro::TokenStream::from(quote! {
         #pre_req
         #input
@@ -466,6 +472,22 @@ pub fn nosql(attrs: proc_macro::TokenStream, minput : proc_macro::TokenStream) -
         #gen_filters
     })
 
+}
+
+fn generate_insert(table : &str, keyspace: &str, fields : Vec<Rc<NoSqlField>>) -> String{
+    let col_len = fields.len();
+    let col : String = fields
+        .into_iter()
+        .map(|f: Rc<NoSqlField>|{
+            f.ident.to_string()
+        })
+        .collect::<Vec<String>>()
+        .join(",");
+    let binds = std::iter::repeat("?")
+        .take(col_len)
+        .collect::<Vec<&str>>()
+        .join(",");
+    format!("INSERT INTO {}.{} ({}) VALUES({})", keyspace, table, col, binds)
 }
 
 struct FilterByBuilder{
@@ -541,24 +563,20 @@ fn len_option<T>(v : &Option<Vec<T>>) -> usize{
     }
 }
 
-fn generate_filters(db_fields : DbFields) -> TokenStream {
-    let field_size = db_fields.partition_keys.len() + len_option(&db_fields.clustering_keys);
-    let fns = len_option(&db_fields.clustering_keys) +1;
+fn generate_filters(partition_keys : Vec<FieldRef>, clustering_keys : Option<Vec<FieldRef>>) -> TokenStream {
+    let field_size = partition_keys.len() + len_option(&clustering_keys);
     let mut token_stream = TokenStream::new();
     let mut filter_builder  = FilterByBuilder::new(field_size);
-    //let mut res = Vec::with_capacity(fns);
 
-    for i in db_fields.partition_keys.iter(){
+    for i in partition_keys.iter(){
         filter_builder.add(&i.name, &i.index.as_deref().unwrap().ident, &i.index.as_deref().unwrap().ty);
     }
     filter_builder.to_tokens(&mut token_stream);
-    //res.push(filter_builder.to_token_stream());
 
-    if let Some(cluster_keys) = db_fields.clustering_keys{
+    if let Some(cluster_keys) = clustering_keys{
         for i in cluster_keys.iter(){
             filter_builder.add(&i.name, &i.index.as_deref().unwrap().ident, &i.index.as_deref().unwrap().ty);
             filter_builder.to_tokens(&mut token_stream);
-            //res.push(filter_builder.to_token_stream());
         }
     }
 
