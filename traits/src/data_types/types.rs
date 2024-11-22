@@ -132,10 +132,15 @@ impl FromCqlData for Uuid{
     }
 }
 
-//
-use crate::nosql::interface::CqlStore;
-use stargate_grpc::{proto::{value::Inner, ColumnSpec}, query::QueryBuilder, Query, ResultSet, Row, Value};
+// Store Type Definitions
+/*
+Defining from and to conversions for store types and cql_type
+*/
+use scylla::deserialize::DeserializeValue;
+use stargate_grpc::{proto::{value::Inner, ColumnSpec}, ResultSet, Row, Value};
+use scylla::frame::response::result::ColumnType;
 
+// astra store type conversions
 pub trait IntoValue{
     fn into(self: Box<Self>) -> Value;
 }
@@ -149,60 +154,6 @@ where
     }
 }
 
-
-//pub struct AstraResult(Vec<ColumnSpec>, Vec<Row>);
-
-pub enum AstraResult{
-    Return(Vec<ColumnSpec>, Vec<Row>),
-    Ack,
-}
-pub struct AstrStatement{
-    query_str : String,
-    binds : Vec<(String, Box<dyn IntoValue + Send>)>,
-    keyspace : &'static str,
-}
-
-impl AstrStatement{
-    pub fn new(query_str : String
-        , binds: Vec<(String, Box<dyn IntoValue + Send>)>
-        , keyspace : &'static str) -> Self
-    {
-        Self
-            {
-                query_str,
-                binds,
-                keyspace
-            }
-    }
-}
-
-#[async_trait::async_trait]
-impl CqlStore for stargate_grpc::StargateClient{
-    type Output = tonic::Response<stargate_grpc::proto::Response>;
-    type Statement = AstrStatement;
-    type StoreError = ();
-    type Query = QueryBuilder;
-
-    async fn execute(&mut self, statement: Self::Statement) -> Result<Self::Output, Self::StoreError> {
-        let query = Self::into_query(statement).build();
-        self.execute_query(query)
-            .await
-            .map_err(|_| ())
-    }
-
-    fn into_query(statement : Self::Statement) -> Self::Query{
-        let mut query = Query::builder()
-            .keyspace(statement.keyspace)
-            .query(statement.query_str.as_str());
-        
-        let mut enumer = statement.binds
-            .into_iter();
-        for (el, value) in enumer.next(){
-            query = query.bind_name(el.as_str(), value.into());
-        }
-        query
-    }
-}
 
 enum AstraResultIter{
     //curr: Option<CqlMap>,
@@ -250,16 +201,6 @@ impl ToCqlRow for ResultSet{
     }
 }
 
-// impl ToCqlRow for AstraResult{
-    
-//     fn to_row_iter(self) -> impl Iterator<Item = CqlMap> {
-//         match self{
-//             AstraResult::Return(column, rows) => AstraResultIter::new(column, rows),
-//             AstraResult::Ack => AstraResultIter::empty(),
-//         }
-//     }
-// }
-
 impl ToCqlData for Value{
     fn to_cql(self) -> CqlType {
         if let None = self.inner{
@@ -287,5 +228,58 @@ impl Into<Value> for CqlType{
             CqlType::Str(s) => Value::string(s),
             _ => unimplemented!("this type is not implemented"),
         }
+    }
+}
+
+#[derive(Debug)]
+struct UnknownType;
+impl std::error::Error for UnknownType {}
+impl std::fmt::Display for UnknownType{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown_type")
+    }
+}
+
+// scylla-cql type conversions
+impl <'frame, 'meta> DeserializeValue<'frame, 'meta> for CqlType{
+    fn deserialize(
+            typ: &'meta scylla::frame::response::result::ColumnType<'meta>,
+            v: Option<scylla::deserialize::FrameSlice<'frame>>,
+        ) -> Result<Self, scylla::deserialize::DeserializationError> {
+            match typ{
+                ColumnType::Boolean => Ok(CqlType::Bool(bool::deserialize(typ,v)?)),
+                ColumnType::Decimal => Ok(CqlType::NumFloat(f64::deserialize(typ,v)?)),
+                ColumnType::Double => Ok(CqlType::NumFloat(f64::deserialize(typ,v)?)),
+                ColumnType::Float => Ok(CqlType::NumFloat(f64::deserialize(typ,v)?)),
+                ColumnType::Int => Ok(CqlType::NumInt(i64::deserialize(typ,v)?)),
+                ColumnType::BigInt => Ok(CqlType::NumInt(i64::deserialize(typ,v)?)),
+                ColumnType::Text => Ok(CqlType::Str(String::deserialize(typ,v)?)),
+                _other => Err(scylla::deserialize::DeserializationError::new(UnknownType)),
+    
+            }
+    }
+    
+    fn type_check(typ: &scylla::frame::response::result::ColumnType) -> Result<(), scylla::deserialize::TypeCheckError> {
+        match typ{
+            ColumnType::Boolean
+            | ColumnType::Decimal 
+            | ColumnType::Double 
+            | ColumnType::Float
+            | ColumnType::Int
+            | ColumnType::BigInt 
+            | ColumnType::Text => Ok(()),
+            _other => Err(scylla::deserialize::TypeCheckError::new(UnknownType)),
+
+        }
+    }
+}
+
+impl scylla::serialize::value::SerializeValue for CqlType{
+    fn serialize<'b>(
+            &self,
+            typ: &ColumnType,
+            writer: scylla::serialize::writers::CellWriter<'b>,
+        ) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, scylla::serialize::SerializationError> {
+        todo!()
     }
 }
