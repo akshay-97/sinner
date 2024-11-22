@@ -1,10 +1,10 @@
 mod generate;
-mod run;
+pub(crate) mod run;
 
-use crate::conn::Conn;
+use crate::{conn::Conn, error};
 use std::path::PathBuf;
 
-pub async fn run_migration(args: &clap::ArgMatches) -> std::io::Result<()> {
+pub async fn run_migration(args: &clap::ArgMatches) -> error::CustomResult<()> {
     match args.subcommand().expect("Invalid") {
         ("generate", args) => generate::generate_migration_file(args),
         ("run", args) => {
@@ -25,7 +25,7 @@ pub async fn run_migration(args: &clap::ArgMatches) -> std::io::Result<()> {
                 .cloned()
                 .unwrap_or(PathBuf::from("./migrations"));
 
-            run::run_migrations(dir, conn).await
+            run::run_migrations(dir, &conn).await
         }
         _ => panic!("invalid"),
     }
