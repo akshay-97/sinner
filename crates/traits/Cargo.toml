@@ -6,5 +6,5 @@ edition = "2021"
 [dependencies]
 async-trait = {version = "*"}
 sin = {path = "../sin"}
-stargate-grpc = {version = "*"}
-tonic = {version = "*"}
+stargate-grpc = {version = "0.4.0"}
+tonic = {version = "0.5"}
