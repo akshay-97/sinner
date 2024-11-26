@@ -3,5 +3,6 @@ CREATE KEYSPACE IF NOT EXISTS metadata WITH REPLICATION = {'class': 'SimpleStrat
 CREATE TABLE IF NOT EXISTS metadata.migration_metadata (
        version text,
        time timestamp,
+       is_run boolean,
        PRIMARY KEY(version)
 );

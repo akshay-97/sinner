@@ -5,6 +5,7 @@ mod conn;
 mod consts;
 mod error;
 mod migrations;
+mod utils;
 
 mod setup;
 

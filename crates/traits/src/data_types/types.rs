@@ -7,7 +7,7 @@ pub enum CqlType {
     Row(CqlMap),
     NumInt(i64),
     NumFloat(f64),
-    Timestamp(i64),
+    Timestamp(time::OffsetDateTime),
     Bytes(Vec<u8>),
     Null,
 }
@@ -45,9 +45,15 @@ impl ToCqlData for f64 {
     }
 }
 
+impl ToCqlData for bool {
+    fn to_cql(self) -> CqlType {
+        CqlType::Bool(self)
+    }
+}
+
 impl ToCqlData for time::OffsetDateTime {
     fn to_cql(self) -> CqlType {
-        CqlType::Timestamp(self.unix_timestamp())
+        CqlType::Timestamp(self)
     }
 }
 
@@ -55,9 +61,7 @@ impl FromCqlData for time::OffsetDateTime {
     type Error = ();
     fn from_cql(result: &CqlType) -> Result<Self, Self::Error> {
         match result {
-            CqlType::Timestamp(timestamp) => {
-                time::OffsetDateTime::from_unix_timestamp(*timestamp).map_err(|_| ())
-            }
+            CqlType::Timestamp(timestamp) => Ok(*timestamp),
             _ => Err(()),
         }
     }
@@ -83,6 +87,16 @@ impl FromCqlData for i64 {
     fn from_cql(result: &CqlType) -> Result<Self, Self::Error> {
         match result {
             CqlType::NumInt(num) => Ok(*num),
+            _ => Err(()),
+        }
+    }
+}
+
+impl FromCqlData for bool {
+    type Error = ();
+    fn from_cql(result: &CqlType) -> Result<Self, Self::Error> {
+        match result {
+            CqlType::Bool(v) => Ok(*v),
             _ => Err(()),
         }
     }
@@ -272,6 +286,9 @@ impl<'frame, 'meta> DeserializeValue<'frame, 'meta> for CqlType {
             ColumnType::Int => Ok(CqlType::NumInt(i64::deserialize(typ, v)?)),
             ColumnType::BigInt => Ok(CqlType::NumInt(i64::deserialize(typ, v)?)),
             ColumnType::Text => Ok(CqlType::Str(String::deserialize(typ, v)?)),
+            ColumnType::Timestamp => Ok(CqlType::Timestamp(time::OffsetDateTime::deserialize(
+                typ, v,
+            )?)),
             _other => Err(scylla::deserialize::DeserializationError::new(UnknownType)),
         }
     }
@@ -301,6 +318,15 @@ impl scylla::serialize::value::SerializeValue for CqlType {
         scylla::serialize::writers::WrittenCellProof<'b>,
         scylla::serialize::SerializationError,
     > {
-        todo!()
+        match self {
+            CqlType::Str(s) => s.serialize(&ColumnType::Text, writer),
+            CqlType::Bool(s) => s.serialize(&ColumnType::Boolean, writer),
+            CqlType::Row(s) => Err(scylla::serialize::SerializationError::new(UnknownType)), //s.serialize(ColumnType::Map(Box<Text>,Box<CqlType>), writer),
+            CqlType::NumInt(s) => s.serialize(&ColumnType::BigInt, writer),
+            CqlType::NumFloat(s) => s.serialize(&ColumnType::Double, writer),
+            CqlType::Timestamp(s) => s.serialize(&ColumnType::Timestamp, writer),
+            CqlType::Bytes(s) => s.serialize(&ColumnType::Text, writer),
+            CqlType::Null => Err(scylla::serialize::SerializationError::new(UnknownType)),
+        }
     }
 }

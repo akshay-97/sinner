@@ -11,10 +11,15 @@ use traits::{
 pub struct Schema {
     pub(crate) version: String,
     time: time::OffsetDateTime,
+    pub is_run: bool,
 }
 
 impl Schema {
-    pub(crate) fn new(version: String, time: time::OffsetDateTime) -> Self {
-        Self { version, time }
+    pub(crate) fn new(version: String, time: time::OffsetDateTime, is_run: bool) -> Self {
+        Self {
+            version,
+            time,
+            is_run,
+        }
     }
 }
