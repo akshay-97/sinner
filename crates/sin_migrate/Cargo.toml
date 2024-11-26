@@ -1,0 +1,19 @@
+[package]
+name = "sin_migrate"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sin = {path = "../sin"}
+traits = {path  = "../traits"}
+clap = { version = "4.5", features = ["derive"] }
+time = { version = "0.3"}
+futures = "0.3.31"
+tokio = {version  = "1.41.1", features = ["rt-multi-thread"] }
+scylla = { workspace = true, features = ["time-03"] }
+thiserror = { workspace = true }
+colored = "2.1.0"
+
+[lints]
+workspace = true
+

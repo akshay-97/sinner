@@ -1,0 +1,17 @@
+[package]
+name = "traits"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = {version = "*"}
+sin = {path = "../sin"}
+stargate-grpc = {version = "0.4.0"}
+tonic = {version = "0.5"}
+time = { version = "0.3" }
+scylla = { workspace = true, features = ["time-03"] }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
+
