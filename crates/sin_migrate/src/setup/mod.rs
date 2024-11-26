@@ -12,6 +12,7 @@ pub async fn setup_migration(conn: &Conn) -> error::CustomResult<()> {
     println!("{}", announce);
 
     let stmts = consts::SIN_SETUP_UP
+        .replace(consts::PLACEHOLDER, "")
         .replace("\n", "")
         .split_inclusive(";")
         .map(|s| s.to_string())
