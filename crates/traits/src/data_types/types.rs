@@ -7,6 +7,7 @@ pub enum CqlType {
     Row(CqlMap),
     NumInt(i64),
     NumFloat(f64),
+    Timestamp(i64),
     Bytes(Vec<u8>),
     Null,
 }
@@ -41,6 +42,24 @@ impl ToCqlData for i64 {
 impl ToCqlData for f64 {
     fn to_cql(self) -> CqlType {
         CqlType::NumFloat(self.clone())
+    }
+}
+
+impl ToCqlData for time::OffsetDateTime {
+    fn to_cql(self) -> CqlType {
+        CqlType::Timestamp(self.unix_timestamp())
+    }
+}
+
+impl FromCqlData for time::OffsetDateTime {
+    type Error = ();
+    fn from_cql(result: &CqlType) -> Result<Self, Self::Error> {
+        match result {
+            CqlType::Timestamp(timestamp) => {
+                time::OffsetDateTime::from_unix_timestamp(*timestamp).map_err(|_| ())
+            }
+            _ => Err(()),
+        }
     }
 }
 
@@ -116,6 +135,7 @@ impl FromCqlData for Status {
         Err(())
     }
 }
+
 pub struct Uuid(pub i64);
 
 impl ToCqlData for Uuid {

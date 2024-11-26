@@ -1,7 +1,8 @@
 [package]
 name = "sin"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [lib]
 proc-macro = true
@@ -11,3 +12,6 @@ syn = {version = "2.0.79", features = ["full", "extra-traits"]}
 proc-macro2 = "1"
 quote = "1"
 serde = {version = "*", features = ["derive"]}
+
+[lints]
+workspace = true

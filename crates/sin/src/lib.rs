@@ -1,4 +1,3 @@
-use proc_macro::Ident;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
@@ -558,3 +557,4 @@ fn generate_filters(
 
     token_stream
 }
+

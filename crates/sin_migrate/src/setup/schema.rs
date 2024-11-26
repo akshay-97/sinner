@@ -7,7 +7,8 @@ use traits::{
 };
 
 #[derive(SerializeRow, DeserializeRow)]
-pub(crate) struct Schema {
+#[sin::nosql(partition_key = [version], table = migration_metadata, keyspace = metadata)]
+pub struct Schema {
     pub(crate) version: String,
     time: time::OffsetDateTime,
 }

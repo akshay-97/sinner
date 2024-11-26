@@ -10,26 +10,26 @@ use traits::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // create an astra store
-    let mut client = get_astra_client().await.expect("client connect failed");
+    // // create an astra store
+    // let mut client = get_astra_client().await.expect("client connect failed");
 
-    let payment = Payment::default();
+    // let payment = Payment::default();
 
-    let create_query = payment.create().build();
+    // let create_query = payment.create().build();
 
-    let find_query = Payment::select()
-        .filter_by(Payment::filter_by_id(1i64))
-        .build();
+    // let find_query = Payment::select()
+    //     .filter_by(Payment::filter_by_id(1i64))
+    //     .build();
 
-    let update_payment = UpdatePayment {
-        status: "asdasd".to_string(),
-    };
-    let _update_query = update_payment
-        .update()
-        .filter_by(Payment::filter_by_id(1i64))
-        .build();
-    let _res_1 = create_query.execute(&mut client).await;
-    let _res_2 = find_query.execute(&mut client).await;
+    // let update_payment = UpdatePayment {
+    //     status: "asdasd".to_string(),
+    // };
+    // let _update_query = update_payment
+    //     .update()
+    //     .filter_by(Payment::filter_by_id(1i64))
+    //     .build();
+    // let _res_1 = create_query.execute(&mut client).await;
+    // let _res_2 = find_query.execute(&mut client).await;
     //let res_3 = update_query.execute(&mut client).await;
 
     Ok(())

@@ -11,4 +11,6 @@ pub(crate) enum Error {
     IoError(#[from] std::io::Error),
     #[error("Error parsing the migration path please use `generate` command to generate migration folder")]
     MigrationPathError,
+    #[error("Queryerror from Sin {0:?}")]
+    SinQueryErrir(#[from] traits::query::query::QueryError),
 }

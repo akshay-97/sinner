@@ -6,17 +6,14 @@ use crate::{
 use stargate_grpc::{query::QueryBuilder, Query};
 
 #[async_trait::async_trait]
-impl CqlStore for stargate_grpc::StargateClient {
+impl<'a> CqlStore for &'a mut stargate_grpc::StargateClient {
     type Output = tonic::Response<stargate_grpc::proto::Response>;
     type Statement = AstrStatement;
     type StoreError = ();
     type Query = QueryBuilder;
 
-    async fn execute(
-        &mut self,
-        statement: Self::Statement,
-    ) -> Result<Self::Output, Self::StoreError> {
-        let query = Self::into_query(self, statement).await.build();
+    async fn execute(self, statement: Self::Statement) -> Result<Self::Output, Self::StoreError> {
+        let query = Self::into_query(&self, statement).await.build();
         self.execute_query(query).await.map_err(|_| ())
     }
 
@@ -56,24 +53,23 @@ impl AstrStatement {
 // Queries
 
 #[async_trait::async_trait]
-impl<T: NoSql + Send> QueryInterface<stargate_grpc::StargateClient> for FindOne<T> {
+impl<'b, T: NoSql + Send> QueryInterface<&'b mut stargate_grpc::StargateClient> for FindOne<T> {
     async fn execute(
         self,
-        store: &mut stargate_grpc::StargateClient,
+        store: &'b mut stargate_grpc::StargateClient,
     ) -> Result<Self::Output, QueryError> {
         let statement =
-            <Self as QueryInterface<stargate_grpc::StargateClient>>::into_statement(self);
-        let result = store
-            .execute(statement)
+            <Self as QueryInterface<&'b mut stargate_grpc::StargateClient>>::into_statement(self);
+        let result = <&'b mut stargate_grpc::StargateClient as CqlStore>::execute(store, statement)
             .await
             .map_err(|_e| QueryError::E01)?; //TODO: add error context here
 
-        <Self as QueryInterface<stargate_grpc::StargateClient>>::into_output(result)
+        <Self as QueryInterface<&'b mut stargate_grpc::StargateClient>>::into_output(result)
             .ok_or(QueryError::E02) // TODO: add error context here
     }
 
     fn into_output(
-        query_output: <stargate_grpc::StargateClient as CqlStore>::Output,
+        query_output: <&'b mut stargate_grpc::StargateClient as CqlStore>::Output,
     ) -> Option<Self::Output> {
         query_output
             .try_into()
@@ -85,7 +81,7 @@ impl<T: NoSql + Send> QueryInterface<stargate_grpc::StargateClient> for FindOne<
             .and_then(|e| T::from_cql(&CqlType::Row(e)).ok())
     }
 
-    fn into_statement(self) -> <stargate_grpc::StargateClient as CqlStore>::Statement {
+    fn into_statement(self) -> <&'b mut stargate_grpc::StargateClient as CqlStore>::Statement {
         let mut res_binds: Vec<(String, Box<dyn IntoValue + Send + 'static>)> =
             Vec::with_capacity(self.binds.len());
         let _ = self
@@ -97,27 +93,28 @@ impl<T: NoSql + Send> QueryInterface<stargate_grpc::StargateClient> for FindOne<
 }
 
 #[async_trait::async_trait]
-impl<T: NoSql + Send> QueryInterface<stargate_grpc::StargateClient> for Create<T> {
+impl<'b, T: NoSql + Send> QueryInterface<&'b mut stargate_grpc::StargateClient> for Create<T> {
     async fn execute(
         self,
-        store: &mut stargate_grpc::StargateClient,
+        store: &'b mut stargate_grpc::StargateClient,
     ) -> Result<Self::Output, QueryError> {
-        let statement = self.into_statement();
-        let result = store
-            .execute(statement)
+        let statement =
+            <Self as QueryInterface<&'b mut stargate_grpc::StargateClient>>::into_statement(self);
+        let result = <&'b mut stargate_grpc::StargateClient as CqlStore>::execute(store, statement)
             .await
             .map_err(|_e| QueryError::E01)?; //TODO: add error context here
 
-        Self::into_output(result).ok_or(QueryError::E02) // TODO: add error context here
+        <Self as QueryInterface<&'b mut stargate_grpc::StargateClient>>::into_output(result)
+            .ok_or(QueryError::E02) // TODO: add error context here
     }
 
     fn into_output(
-        _query_output: <stargate_grpc::StargateClient as CqlStore>::Output,
+        _query_output: <&'b mut stargate_grpc::StargateClient as CqlStore>::Output,
     ) -> Option<Self::Output> {
         Some(true) // TODO: verify result
     }
 
-    fn into_statement(self) -> <stargate_grpc::StargateClient as CqlStore>::Statement {
+    fn into_statement(self) -> <&'b mut stargate_grpc::StargateClient as CqlStore>::Statement {
         if let CqlType::Row(bind_map) = T::to_cql(self.model) {
             let mut res_binds: Vec<(String, Box<dyn IntoValue + Send + 'static>)> =
                 Vec::with_capacity(bind_map.len());

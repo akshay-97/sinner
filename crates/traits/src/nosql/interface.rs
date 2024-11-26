@@ -7,14 +7,14 @@ pub trait NoSql: FromCqlData + ToCqlData {
 }
 
 #[async_trait::async_trait]
-pub(crate) trait CqlStore {
+pub trait CqlStore: Sized {
     type Output;
     type Statement;
     type StoreError;
     type Query;
 
     async fn execute(
-        &mut self,
+        self,
         statement: Self::Statement,
     ) -> Result<Self::Output, Self::StoreError>;
     async fn into_query(&self, statement: Self::Statement) -> Self::Query;

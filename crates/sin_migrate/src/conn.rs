@@ -1,7 +1,7 @@
 use scylla::{Session, SessionBuilder};
 
 pub(crate) struct Conn {
-    conn: Session,
+    pub(crate) conn: Session,
 }
 
 impl Conn {

@@ -6,15 +6,21 @@ pub trait QueryResultType {
     type Output;
 }
 
+#[derive(Debug, thiserror::Error)]
 pub enum QueryError {
+    #[error("E01")]
     E01,
+    #[error("E02")]
     E02,
+    #[error("E03")]
     E03,
 }
 
 #[async_trait::async_trait]
 pub trait QueryInterface<S: CqlStore>: QueryResultType {
-    async fn execute(self, store: &mut S) -> Result<Self::Output, QueryError>;
+    async fn execute(self, store: S) -> Result<Self::Output, QueryError>
+    where
+        S: 'async_trait;
     fn into_output(query_output: S::Output) -> Option<Self::Output>;
     fn into_statement(self) -> S::Statement;
 }

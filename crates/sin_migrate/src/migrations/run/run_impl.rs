@@ -5,8 +5,10 @@ use crate::{
 };
 use colored::Colorize;
 use futures::{StreamExt, TryStreamExt};
-use std::collections::HashMap;
+use scylla::Session;
 use std::path::PathBuf;
+use std::{collections::HashMap, ops::Deref};
+use traits::query::{client::Insertable, query::QueryInterface};
 
 pub(crate) struct MigrationsToRun {
     dirs: Vec<PathBuf>,
@@ -113,14 +115,11 @@ impl MigrationsToRun {
 
     // TODO: Replace this with the implementation in the main library
     async fn insert_metadata(conn: &Conn, version: &str) -> error::CustomResult<()> {
-        // TODO: Replace this with ORM implementation
-        let now = time::OffsetDateTime::now_utc().unix_timestamp();
-        let query = format!(
-            "INSERT INTO metadata.migration_metadata (version, time) VALUES ('{}', {});",
-            version, now
-        );
+        let now = time::OffsetDateTime::now_utc();
+        let schema = Schema::new(version.to_string(), now);
+        let create = schema.create().build();
+        create.execute(&conn.conn).await?;
 
-        conn.query_unpaged(query, &[]).await?;
         Ok(())
     }
 
