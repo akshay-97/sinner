@@ -8,31 +8,23 @@ use crate::{
     utils,
 };
 
-pub(crate) struct MigrationsUndo(PathBuf);
+pub(crate) struct MigrationsUndo(String, PathBuf);
 
 impl MigrationsUndo {
     pub(crate) fn new(dir: PathBuf) -> CustomResult<Self> {
         let dirs = std::fs::read_dir(dir)?;
+        let mut tree = utils::get_migration_tree(dirs)?;
+        let first = tree.pop_last().ok_or(Error::MigrationPathError)?;
 
-        let mut dirs = dirs
-            .into_iter()
-            .map(|s| s.map(|s| s.path()))
-            .collect::<std::io::Result<Vec<_>>>()?;
-
-        dirs.sort_unstable_by(|a, b| a.file_name().cmp(&b.file_name()));
-
-        Ok(Self(
-            dirs.first().ok_or(Error::MigrationPathError)?.to_path_buf(),
-        ))
+        Ok(Self(first.0, first.1))
     }
 
     pub(crate) async fn undo(mut self, conn: &Conn) -> CustomResult<()> {
-        let version = utils::extract_version(&self.0)?;
-        self.0.push(consts::DOWN_CQL);
-        let announce = format!("Reverting migrations for {}", self.0.to_string_lossy()).green();
+        self.1.push(consts::DOWN_CQL);
+        let announce = format!("Reverting migrations for {}", self.1.to_string_lossy()).green();
 
         println!("{}", announce);
-        utils::run_cql_queries(&self.0, conn, &version, false).await?;
+        utils::run_cql_queries(&self.1, conn, &self.0, false).await?;
         Ok(())
     }
 }
