@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     data_types::types::{CqlMap, CqlType},
     nosql::interface::{CqlStore, NoSql},
@@ -9,11 +11,11 @@ use scylla::{
 
 pub struct ScyllaQuery {
     query_string: String,
-    binds: Vec<Box<dyn SerializeValue + Send>>,
+    pub binds: HashMap<String, CqlType>,
 }
 
 impl ScyllaQuery {
-    fn new(query_string: String, binds: Vec<Box<dyn SerializeValue + Send>>) -> Self {
+    fn new(query_string: String, binds: HashMap<String, CqlType>) -> Self {
         Self {
             query_string,
             binds,
@@ -22,15 +24,12 @@ impl ScyllaQuery {
 }
 
 pub struct ScyllaPreparedStatement {
-    binds: Vec<Box<dyn SerializeValue + Send>>,
+    binds: HashMap<String, CqlType>,
     prepared_statement: PreparedStatement,
 }
 
 impl ScyllaPreparedStatement {
-    pub fn new(
-        binds: Vec<Box<dyn SerializeValue + Send>>,
-        prepared_statement: PreparedStatement,
-    ) -> Self {
+    pub fn new(binds: HashMap<String, CqlType>, prepared_statement: PreparedStatement) -> Self {
         Self {
             binds,
             prepared_statement,
@@ -51,7 +50,7 @@ impl<'a> CqlStore for &'a Session {
         let result = self
             .execute_unpaged(&query.prepared_statement, query.binds)
             .await
-            .map_err(|_e| ())?; // TODO : manage and propogate errors
+            .map_err(|e| {})?; // TODO : manage and propogate errors
         Ok(result)
     }
 
@@ -87,14 +86,7 @@ impl<'b, T: NoSql + Send> QueryInterface<&'b Session> for FindOne<T> {
     }
 
     fn into_statement(self) -> <&'b Session as CqlStore>::Statement {
-        let mut res: Vec<Box<dyn SerializeValue + Send + 'static>> =
-            Vec::with_capacity(self.binds.len());
-        let _binds = self
-            .binds
-            .into_iter()
-            .for_each(|(_col, val)| res.push(Box::new(val)));
-
-        ScyllaQuery::new(self.query, res)
+        ScyllaQuery::new(self.query, self.binds)
     }
 }
 
@@ -117,12 +109,7 @@ impl<'b, T: NoSql + Send> QueryInterface<&'b Session> for Create<T> {
 
     fn into_statement(self) -> <&'b Session as CqlStore>::Statement {
         if let CqlType::Row(bind_map) = T::to_cql(self.model) {
-            let mut res_binds: Vec<Box<dyn SerializeValue + Send + 'static>> =
-                Vec::with_capacity(bind_map.len());
-            let _ = bind_map
-                .into_iter()
-                .map(|(_, val)| res_binds.push(Box::new(val)));
-            ScyllaQuery::new(T::insert_statement().to_string(), res_binds)
+            ScyllaQuery::new(T::insert_statement().to_string(), bind_map)
         } else {
             panic!("fix me")
         }
