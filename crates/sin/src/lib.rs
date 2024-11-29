@@ -557,4 +557,3 @@ fn generate_filters(
 
     token_stream
 }
-
