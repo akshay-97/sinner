@@ -48,8 +48,40 @@ impl Cli {
                                     .required(true),
                             ),
                     )
-                    .subcommand(Command::new("redo"))
-                    .subcommand(Command::new("undo")),
+                    .subcommand(
+                        Command::new("redo")
+                            .arg(
+                                Arg::new("DATABASE_URL")
+                                    .long("url")
+                                    .required(true)
+                                    .help("Database connection URL"),
+                            )
+                            .arg(Arg::new("DATABASE_USERNAME").long("user").short('u'))
+                            .arg(Arg::new("DATBASE_PASSWORD").long("password").short('p'))
+                            .arg(
+                                Arg::new("KEYSPACE")
+                                    .long("keyspace")
+                                    .short('k')
+                                    .required(true),
+                            ),
+                    )
+                    .subcommand(
+                        Command::new("undo")
+                            .arg(
+                                Arg::new("DATABASE_URL")
+                                    .long("url")
+                                    .required(true)
+                                    .help("Database connection URL"),
+                            )
+                            .arg(Arg::new("DATABASE_USERNAME").long("user").short('u'))
+                            .arg(Arg::new("DATBASE_PASSWORD").long("password").short('p'))
+                            .arg(
+                                Arg::new("KEYSPACE")
+                                    .long("keyspace")
+                                    .short('k')
+                                    .required(true),
+                            ),
+                    ),
             );
         Self { command }
     }
