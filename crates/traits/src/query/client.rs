@@ -2,7 +2,9 @@ use crate::{
     data_types::types::{CqlMap, CqlMapWithQuery, ToCqlRow},
     nosql::interface::NoSql,
     query::query::{Create, FindAll, FindOne, Update},
+    query_builder::select::SelectBuilder as NewSelectBuilder,
 };
+
 use std::marker::PhantomData;
 
 pub struct FilterBy<T> {
@@ -76,24 +78,15 @@ impl<T: NoSql> SelectBuilder<T, Init> {
         }
     }
 
-    pub fn filter_by(self, filter: FilterBy<T>) -> SelectBuilder<T, Ready> {
-        SelectBuilder {
-            wh_clause: Some(filter),
-            state: Ready,
-            _model: self._model,
-        }
+    pub fn filter_by(self, filter: NewSelectBuilder<T>) -> NewSelectBuilder<T> {
+        filter
     }
 }
+
 impl<T: NoSql> SelectBuilder<T, Ready> {
-    pub fn build(self) -> FindOne<T> {
+    pub fn build(self) -> NewSelectBuilder<T> {
         let filter = self.wh_clause.expect("filter not found");
-        let query_string = format!(
-            "SELECT * FROM {}.{} WHERE {}",
-            T::keyspace(),
-            T::table_name(),
-            filter.query_string
-        );
-        FindOne::<T>::create_query(filter.filter, query_string)
+        NewSelectBuilder::<T>::new(filter.filter)
     }
 }
 

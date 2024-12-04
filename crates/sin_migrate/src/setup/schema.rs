@@ -4,6 +4,7 @@ use traits::{
     data_types::types::{CqlType, FromCqlData, ToCqlData},
     nosql::interface::NoSql,
     query::client::{FilterBy, Insertable, Selectable},
+    query_builder::select::{SelectBuilder, SelectClause},
 };
 
 #[derive(SerializeRow, DeserializeRow)]

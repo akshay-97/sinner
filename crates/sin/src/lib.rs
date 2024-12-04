@@ -427,7 +427,7 @@ pub fn nosql(
 
     };
 
-    let filters = generate_filters(fields.partition_keys, fields.clustering_keys);
+    let filters = generate_filters(table, fields.partition_keys, fields.clustering_keys);
 
     let gen_filters = {
         quote! {
@@ -464,93 +464,113 @@ fn generate_insert(table: &str, keyspace: &str, fields: Vec<Rc<NoSqlField>>) -> 
 }
 
 struct FilterByBuilder {
-    data_map: Vec<(syn::Ident, syn::Type)>,
+    table: String,
+    data_map: Vec<FieldRef>,
     query_string: String,
     fn_prefix: String,
 }
 
 impl FilterByBuilder {
     //TODO: add approx for string size as well
-    fn new(field_size: usize) -> Self {
+    fn new(field_size: usize, table: String) -> Self {
         Self {
+            table,
             data_map: Vec::with_capacity(field_size),
             query_string: String::new(),
             fn_prefix: String::from("filter_by"),
         }
     }
 
-    fn add(&mut self, name: &String, ident: &syn::Ident, ty: &syn::Type) {
-        if self.query_string.len() == 0 {
-            self.query_string.extend([name.as_str(), " = ?"]);
-        } else {
-            self.query_string.extend([" AND ", name.as_str(), " = ?"]);
-        }
-        self.fn_prefix.extend(["_", name.as_str()]);
+    fn add(&mut self, field: FieldRef) {
+        self.fn_prefix.extend(["_", field.name.as_str()]);
 
-        self.data_map.push((ident.clone(), ty.clone()));
+        self.data_map.push(field);
     }
 }
 
 impl ToTokens for FilterByBuilder {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let fn_sig = self.data_map.iter().map(|(ident, ty)| {
+        let fn_sig = self.data_map.iter().map(|field| {
+            let ident = &field.index.as_deref().unwrap().ident;
+            let ty = &field.index.as_deref().unwrap().ty;
+
             quote! {
                 #ident : #ty
             }
         });
 
-        let fn_body = self.data_map.iter().map(|(ident, _)| {
+        let fn_body = self.data_map.iter().map(|field| {
+            let ident = &field.index.as_deref().unwrap().ident.to_string();
+            let typ = &field.index.as_deref().unwrap().ty;
+
             quote! {
-                (stringify!(#ident).to_string(), #ident.to_cql())
+                (#ident.to_string(), #typ.to_cql())
             }
         });
+
+        let body = generate_select_builder(&self.table, &self.data_map, fn_body);
+
         let fn_name = syn::Ident::new(&self.fn_prefix.as_str(), Span::call_site().into());
 
-        let query_string = syn::Lit::Str(syn::LitStr::new(
-            self.query_string.as_str(),
-            Span::call_site().into(),
-        ));
         let res = quote! {
-            fn #fn_name (#(#fn_sig),*) -> FilterBy<Self>{
-                let filter = HashMap::from([#(#fn_body),*]);
-                FilterBy::<Self>::new(filter, #query_string)
+            fn #fn_name (#(#fn_sig),*) -> SelectClause<Self>{
+                #body
             }
         };
+
         tokens.extend(res);
     }
 }
 
-fn len_option<T>(v: &Option<Vec<T>>) -> usize {
-    match v {
-        None => 0,
-        Some(ve) => ve.len(),
+fn generate_select_builder(
+    table: &str,
+    refs: &[FieldRef],
+    iter: impl Iterator<Item = TokenStream>,
+) -> TokenStream {
+    if refs.len() == 1 {
+        let field_name = &refs.first().unwrap().name;
+
+        return quote! {
+            let filter = HashMap::from([#(#iter),*]);
+            SelectBuilder::<Self>::new(filter).wh().eq(String::from(#field_name))
+        };
+    }
+
+    let fields = refs.iter().map(|field| {
+        let field_name = &field.name;
+
+        quote! {
+            .and().eq(String::from(#field_name))
+        }
+    });
+
+    quote! {
+        let filter = HashMap::from([#(#iter),*]);
+        SelectBuilder::<Self>::new(#table.to_string(), filter).wh()#(#fields)*
     }
 }
 
 fn generate_filters(
+    table: String,
     partition_keys: Vec<FieldRef>,
     clustering_keys: Option<Vec<FieldRef>>,
 ) -> TokenStream {
-    let field_size = partition_keys.len() + len_option(&clustering_keys);
+    let field_size = partition_keys.len()
+        + clustering_keys
+            .as_ref()
+            .map(|v| v.len())
+            .unwrap_or_default();
     let mut token_stream = TokenStream::new();
-    let mut filter_builder = FilterByBuilder::new(field_size);
+    let mut filter_builder = FilterByBuilder::new(field_size, table);
 
-    for i in partition_keys.iter() {
-        filter_builder.add(
-            &i.name,
-            &i.index.as_deref().unwrap().ident,
-            &i.index.as_deref().unwrap().ty,
-        );
+    for i in partition_keys.into_iter() {
+        filter_builder.add(i);
     }
     filter_builder.to_tokens(&mut token_stream);
 
     if let Some(cluster_keys) = clustering_keys {
-        for i in cluster_keys.iter() {
-            filter_builder.add(
-                &i.name,
-                &i.index.as_deref().unwrap().ident,
-                &i.index.as_deref().unwrap().ty,
-            );
+        for i in cluster_keys.into_iter() {
+            filter_builder.add(i);
             filter_builder.to_tokens(&mut token_stream);
         }
     }

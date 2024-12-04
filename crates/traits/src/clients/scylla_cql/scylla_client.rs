@@ -4,7 +4,9 @@ use crate::{
     data_types::types::{CqlMap, CqlType},
     nosql::interface::{CqlStore, NoSql},
     query::query::{Create, FindOne, QueryError, QueryInterface},
+    query_builder::select::SelectQuery,
 };
+
 use scylla::{
     prepared_statement::PreparedStatement, serialize::value::SerializeValue, QueryResult, Session,
 };
@@ -87,6 +89,32 @@ impl<'b, T: NoSql + Send> QueryInterface<&'b Session> for FindOne<T> {
 
     fn into_statement(self) -> <&'b Session as CqlStore>::Statement {
         ScyllaQuery::new(self.query, self.binds)
+    }
+}
+
+#[async_trait::async_trait]
+impl<'b, T: NoSql + Send> QueryInterface<&'b Session> for SelectQuery<T> {
+    async fn execute(self, store: &'b Session) -> Result<Self::Output, QueryError> {
+        let statement = <Self as QueryInterface<&'b Session>>::into_statement(self);
+        let result = <&'b Session as CqlStore>::execute(store, statement)
+            .await
+            .map_err(|_e| QueryError::E01)?;
+
+        <Self as QueryInterface<&'b Session>>::into_output(result).ok_or(QueryError::E02)
+    }
+
+    fn into_output(query_output: <&'b Session as CqlStore>::Output) -> Option<Self::Output> {
+        let iter = query_output.into_rows_result().ok()?;
+        let res = iter.first_row::<CqlMap>().ok().and_then(
+            |cql_map: std::collections::HashMap<String, CqlType>| {
+                T::from_cql(&CqlType::Row(cql_map)).ok()
+            },
+        )?;
+        Some(res)
+    }
+
+    fn into_statement(self) -> <&'b Session as CqlStore>::Statement {
+        ScyllaQuery::new(self.query(), self.binds())
     }
 }
 

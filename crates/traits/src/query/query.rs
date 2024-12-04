@@ -1,5 +1,8 @@
 use crate::data_types::types::CqlMap;
-use crate::nosql::interface::{CqlStore, NoSql};
+use crate::{
+    nosql::interface::{CqlStore, NoSql},
+    query_builder::select::SelectQuery,
+};
 use std::marker::PhantomData;
 
 pub trait QueryResultType {
@@ -42,6 +45,10 @@ impl<T: NoSql> FindOne<T> {
 }
 
 impl<T: NoSql> QueryResultType for FindOne<T> {
+    type Output = T;
+}
+
+impl<T: NoSql> QueryResultType for SelectQuery<T> {
     type Output = T;
 }
 

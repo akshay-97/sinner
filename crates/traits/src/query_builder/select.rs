@@ -3,19 +3,22 @@ use std::marker::PhantomData;
 
 use crate::{
     data_types::types::CqlMap,
+    nosql::interface::NoSql,
     query_builder::{query::CassandraQuery, QueryBuilder},
 };
 
-pub struct SelectBuilder<T> {
+pub struct SelectBuilder<T: NoSql> {
     table: String,
+    keyspace: String,
     fields: CqlMap,
     _phantom: PhantomData<T>,
 }
 
-impl<T> SelectBuilder<T> {
-    pub fn new(table: String, fields: CqlMap) -> Self {
+impl<T: NoSql> SelectBuilder<T> {
+    pub fn new(fields: CqlMap) -> Self {
         Self {
-            table,
+            table: T::table_name().to_string(),
+            keyspace: T::keyspace().to_string(),
             fields,
             _phantom: PhantomData,
         }
@@ -40,9 +43,12 @@ impl<T> SelectBuilder<T> {
     }
 }
 
-impl<T> QueryBuilder for SelectBuilder<T> {
+impl<T: NoSql> QueryBuilder for SelectBuilder<T> {
     fn walk_ast(&self, query: &mut CassandraQuery) {
-        query.push_cql(&format!("SELECT * FROM {} ", &self.table));
+        query.push_cql(&format!(
+            "SELECT * FROM {}.{} ",
+            &self.keyspace, &self.table
+        ));
     }
 }
 
@@ -51,32 +57,6 @@ pub struct SelectClause<T> {
     _query: CassandraQuery,
     fields: CqlMap,
     _phantom: PhantomData<T>,
-}
-
-pub struct SelectCombine<T> {
-    _query: CassandraQuery,
-    fields: CqlMap,
-    _phantom: PhantomData<T>,
-}
-
-impl<T> SelectCombine<T> {
-    pub fn new(_query: CassandraQuery, fields: CqlMap) -> Self {
-        Self {
-            _query,
-            fields,
-            _phantom: PhantomData,
-        }
-    }
-
-    pub fn and(mut clause: SelectClause<T>) -> SelectClause<T> {
-        And::new().walk_ast(&mut clause._query);
-        clause
-    }
-
-    pub fn or(mut clause: SelectClause<T>) -> SelectClause<T> {
-        Or::new().walk_ast(&mut clause._query);
-        clause
-    }
 }
 
 impl<T> SelectClause<T> {
@@ -115,6 +95,16 @@ impl<T> SelectClause<T> {
         self
     }
 
+    pub fn and(mut self) -> Self {
+        And::new().walk_ast(&mut self._query);
+        self
+    }
+
+    pub fn or(mut self) -> Self {
+        Or::new().walk_ast(&mut self._query);
+        self
+    }
+
     pub fn limit(mut self, limit: u32) -> SelectQuery<T> {
         Limit::new(limit).walk_ast(&mut self._query);
 
@@ -139,6 +129,16 @@ pub struct SelectQuery<T> {
     _query: CassandraQuery,
     fields: CqlMap,
     _phantom: PhantomData<T>,
+}
+
+impl<T> SelectQuery<T> {
+    pub fn query(&self) -> String {
+        self._query.query()
+    }
+
+    pub fn binds(&self) -> CqlMap {
+        self.fields.clone()
+    }
 }
 
 impl<R, T: AsRef<str>> PartialEq<T> for SelectQuery<R> {
