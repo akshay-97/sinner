@@ -23,6 +23,9 @@ impl<T> FilterBy<T> {
 
 trait State {}
 
+pub struct Limit;
+impl State for Limit {}
+
 pub struct Init;
 impl State for Init {}
 
@@ -100,6 +103,7 @@ impl<T: NoSql> SelectBuilder<T, Ready> {
 pub struct SelectAllBuilder<T: NoSql, S: State> {
     wh_clause: Option<FilterBy<T>>,
     state: S,
+    limit: Option<u64>,
     _model: PhantomData<T>,
 }
 
@@ -109,6 +113,16 @@ impl<T: NoSql> SelectAllBuilder<T, Init> {
             wh_clause: None,
             state: Init,
             _model: PhantomData,
+            limit: None,
+        }
+    }
+
+    pub fn limit(self, limit: u64) -> SelectAllBuilder<T, Limit> {
+        SelectAllBuilder {
+            wh_clause: self.wh_clause,
+            state: Limit,
+            limit: Some(limit),
+            _model: PhantomData,
         }
     }
 
@@ -117,6 +131,7 @@ impl<T: NoSql> SelectAllBuilder<T, Init> {
             wh_clause: Some(filter),
             state: Ready,
             _model: self._model,
+            limit: None,
         }
     }
 }
@@ -130,6 +145,24 @@ impl<T: NoSql> SelectAllBuilder<T, Ready> {
             filter.query_string
         );
         FindAll::<T>::create_query(filter.filter, query_string)
+    }
+}
+
+impl<T: NoSql> SelectAllBuilder<T, Limit> {
+    pub fn build(self) -> FindAll<T> {
+        let mut filters = None;
+        let mut query_string = format!("SELECT * FROM {}.{} ", T::keyspace(), T::table_name());
+
+        if let Some(clause) = self.wh_clause {
+            filters = Some(clause.filter);
+            query_string.push_str(&format!("WHERE {}", clause.query_string));
+        }
+
+        let limit = self.limit.expect("Limit is expected");
+
+        query_string.push_str(&format!("LIMIT {}", limit));
+
+        FindAll::<T>::create_query(filters.unwrap_or_default(), query_string)
     }
 }
 

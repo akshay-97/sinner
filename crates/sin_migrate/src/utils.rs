@@ -2,7 +2,10 @@ use crate::{conn::Conn, consts, error, setup::Schema};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use traits::query::{client::Insertable, query::QueryInterface};
+use traits::query::{
+    client::{Insertable, Selectable},
+    query::QueryInterface,
+};
 
 pub fn parse_cql_statements(file: &PathBuf) -> error::CustomResult<Vec<String>> {
     Ok(std::fs::read_to_string(&file)?
@@ -14,8 +17,12 @@ pub fn parse_cql_statements(file: &PathBuf) -> error::CustomResult<Vec<String>> 
 }
 
 pub async fn is_fresh_migration(conn: &Conn) -> bool {
-    let query = consts::SIN_CHECK_MIGRATE;
-    conn.query_unpaged(query.to_string(), &[]).await.is_err()
+    Schema::select_all()
+        .limit(1)
+        .build()
+        .execute(&conn.conn)
+        .await
+        .is_err()
 }
 
 pub fn get_migration_tree(dir: std::fs::ReadDir) -> error::CustomResult<BTreeMap<String, PathBuf>> {

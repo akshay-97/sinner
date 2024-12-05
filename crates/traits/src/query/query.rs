@@ -46,8 +46,8 @@ impl<T: NoSql> QueryResultType for FindOne<T> {
 }
 
 pub struct FindAll<T: NoSql> {
-    binds: CqlMap,
-    query: String,
+    pub(crate) binds: CqlMap,
+    pub(crate) query: String,
     _model: PhantomData<T>,
 }
 
