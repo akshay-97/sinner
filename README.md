@@ -36,5 +36,5 @@ let find_payment = Payment::select()
     .filter_by(Payment::filter_by_id(_))
     .build();
 
-let res = find_query.execute(&mut client).await;
+let res = find_payment.execute(&mut client).await;
 ```
